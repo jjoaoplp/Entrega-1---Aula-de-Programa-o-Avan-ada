@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tradutor de #hashtags e @menções</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 760px;
+      margin: 30px auto;
+      padding: 0 18px;
+      color: #222;
+      line-height: 1.5;
+    }
+    h1 { line-height: 1.2; }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      font: inherit;
+      font-size: 16px;
+      padding: 12px;
+      border: 1px solid #aaa;
+      border-radius: 6px;
+      resize: vertical;
+    }
+    button {
+      margin: 10px 0;
+      padding: 10px 18px;
+      font-size: 16px;
+      border: 0;
+      border-radius: 6px;
+      background: #175cd3;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover { background: #1249aa; }
+    #saida {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 12px;
+      min-height: 48px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .erro {
+      background: #fdd;
+      color: #900;
+      border-radius: 3px;
+    }
+    .contadores {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #f3f5f7;
+      border-radius: 6px;
+    }
+    #erros { padding-left: 24px; }
+    .dica { color: #555; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Tradutor de #hashtags e @menções</h1>
+  <p>Digite um texto de rede social. Menções conhecidas serão substituídas por nomes completos e hashtags conhecidas por emojis.</p>
+
+  <label for="entrada"><strong>Texto de entrada</strong></label>
+  <textarea id="entrada" placeholder="Ex.: Hoje @joao trouxe #frutas:banana e @maria levou #comidas:pizza!"></textarea>
+  <br>
+  <button id="botao" type="button">Traduzir</button>
+
+  <h3>Resultado</h3>
+  <div id="saida" aria-live="polite"></div>
+
+  <div class="contadores" aria-live="polite">
+    <strong>Traduções realizadas</strong>
+    <div>Menções traduzidas com sucesso: <span id="contadorMencoes">0</span></div>
+    <div>Hashtags traduzidas com sucesso: <span id="contadorHashtags">0</span></div>
+  </div>
+
+  <h3>Erros encontrados</h3>
+  <ul id="erros"></ul>
+  <p class="dica">Dica: e-mails como ana@site.com são preservados. Use <code>$texto$</code> para deixar um trecho em negrito.</p>
+
+  <script>
+    const emojis = {
+      "frutas:banana": "🍌",
+      "frutas:uva": "🍇",
+      "frutas:maçã": "🍎",
+      "frutas:laranja": "🍊",
+      "frutas:morango": "🍓",
+      "frutas:abacaxi": "🍍",
+      "animais:gato": "🐱",
+      "animais:cachorro": "🐶",
+      "animais:coelho": "🐰",
+      "comidas:pizza": "🍕",
+      "comidas:hamburguer": "🍔",
+      "comidas:sushi": "🍣"
+    };
+
+    const pessoas = {
+      "joao": "João da Silva",
+      "maria": "Maria Oliveira",
+      "ana": "Ana Souza",
+      "pedro": "Pedro Santos",
+      "maria.silva": "Maria Silva",
+      "carlos": "Carlos Almeida",
+      "julia": "Júlia Costa",
+      "lucas": "Lucas Ferreira"
+    };
+
+    function marcarErro(trecho) {
+      return '<span class="erro">' + trecho + "</span>";
+    }
+
+    function escaparHtml(texto) {
+      return texto
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function substituirMencoes(texto, erros, contadores) {
+      // O lookbehind evita reconhecer o @ de endereços de e-mail.
+      // O ponto só faz parte do usuário quando é seguido por outro trecho de nome.
+      const padrao = /(?<![\w.])@([\wÀ-ÿ]+(?:\.[\wÀ-ÿ]+)*)/g;
+
+      return texto.replace(padrao, function (trecho, usuario) {
+        const chave = usuario.toLowerCase();
+
+        if (!Object.hasOwn(pessoas, chave)) {
+          erros.push("Menção desconhecida: " + trecho);
+          return marcarErro(trecho);
+        }
+
+        contadores.mencoes++;
+        return pessoas[chave];
+      });
+    }
+
+    function substituirHashtags(texto, erros, contadores) {
+      const padrao = /#([\wÀ-ÿ]+)(?::([\wÀ-ÿ]+))?/g;
+
+      return texto.replace(padrao, function (trecho, categoria, valor) {
+        if (valor === undefined) {
+          erros.push(
+            "Hashtag em formato inválido: " + trecho + " (use #categoria:valor)"
+          );
+          return marcarErro(trecho);
+        }
+
+        const chave = (categoria + ":" + valor).toLowerCase();
+
+        if (!Object.hasOwn(emojis, chave)) {
+          erros.push("Hashtag desconhecida: " + trecho);
+          return marcarErro(trecho);
+        }
+
+        contadores.hashtags++;
+        return emojis[chave];
+      });
+    }
+
+    function substituirNegrito(texto) {
+      return texto.replace(/\$([^$]+)\$/g, "<strong>$1</strong>");
+    }
+
+    function traduzir() {
+      const erros = [];
+      const contadores = { mencoes: 0, hashtags: 0 };
+      let texto = escaparHtml(document.getElementById("entrada").value);
+
+      texto = substituirMencoes(texto, erros, contadores);
+      texto = substituirHashtags(texto, erros, contadores);
+      texto = substituirNegrito(texto);
+
+      document.getElementById("saida").innerHTML = texto;
+      document.getElementById("contadorMencoes").textContent = contadores.mencoes;
+      document.getElementById("contadorHashtags").textContent = contadores.hashtags;
+
+      const lista = document.getElementById("erros");
+      lista.innerHTML = "";
+
+      if (erros.length === 0) {
+        const item = document.createElement("li");
+        item.textContent = "Nenhum erro encontrado.";
+        lista.appendChild(item);
+      }
+
+      for (const mensagem of erros) {
+        const item = document.createElement("li");
+        item.className = "erro";
+        item.textContent = mensagem;
+        lista.appendChild(item);
+      }
+    }
+
+    document.getElementById("botao").addEventListener("click", traduzir);
+  </script>
+</body>
+</html>
